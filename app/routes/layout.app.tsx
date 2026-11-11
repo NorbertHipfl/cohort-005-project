@@ -3,6 +3,7 @@ import type { Route } from "./+types/layout.app";
 import { Sidebar } from "~/components/sidebar";
 import { DevUI } from "~/components/dev-ui";
 import { Toaster } from "sonner";
+import { NotificationInboxPrototype } from "~/components/notification-inbox.prototype";
 import { getCurrentUserId, getDevCountry } from "~/lib/session";
 import { getCountryTierInfo, COUNTRIES } from "~/lib/ppp";
 import { eq, and, or, sql, desc } from "drizzle-orm";
@@ -17,6 +18,7 @@ import {
   teamMembers,
   TeamMemberRole,
   LessonProgressStatus,
+  UserRole,
 } from "~/db/schema";
 
 function getAllUsers() {
@@ -172,6 +174,33 @@ function getRecentlyProgressedCourses(userId: number, limit: number = 3) {
 }
 
 export async function loader({ request }: Route.LoaderArgs) {
+  const url = new URL(request.url);
+  if (
+    import.meta.env.DEV &&
+    ["/dashboard", "/dashboard.data"].includes(url.pathname) &&
+    url.searchParams.get("prototype") === "notifications"
+  ) {
+    const role =
+      url.searchParams.get("persona") === "instructor"
+        ? UserRole.Instructor
+        : UserRole.Student;
+    return {
+      notificationPrototype: true,
+      users: [],
+      currentUser: {
+        id: -1,
+        name: "Prototype preview",
+        role,
+        avatarUrl: null,
+      },
+      recentCourses: [],
+      devCountry: "US",
+      countryTierInfo: getCountryTierInfo("US"),
+      countries: COUNTRIES,
+      isTeamAdmin: false,
+    };
+  }
+
   const users = getAllUsers();
   const currentUserId = await getCurrentUserId(request);
   const currentUser = currentUserId ? getUserById(currentUserId) : null;
@@ -199,6 +228,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     : [];
 
   return {
+    notificationPrototype: false,
     users: users.map((u) => ({ id: u.id, name: u.name, role: u.role })),
     currentUser: currentUser
       ? {
@@ -226,6 +256,19 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
     countries,
     isTeamAdmin: userIsTeamAdmin,
   } = loaderData;
+
+  if (import.meta.env.DEV && loaderData.notificationPrototype) {
+    return (
+      <div className="flex min-h-screen bg-background">
+        <div inert className="sticky top-0 hidden h-screen shrink-0 md:block">
+          <Sidebar currentUser={currentUser} />
+        </div>
+        <main className="min-w-0 flex-1">
+          <NotificationInboxPrototype />
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen overflow-hidden">

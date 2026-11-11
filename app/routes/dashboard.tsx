@@ -189,6 +189,13 @@ export function meta() {
 }
 
 export async function loader({ request }: Route.LoaderArgs) {
+  if (
+    import.meta.env.DEV &&
+    new URL(request.url).searchParams.get("prototype") === "notifications"
+  ) {
+    return { inProgressCourses: [], completedCourses: [] };
+  }
+
   const currentUserId = await getCurrentUserId(request);
 
   if (!currentUserId) {
