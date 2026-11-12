@@ -1,0 +1,368 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Throwaway notification infrastructure simulation</title>
+  <style>
+    :root { color-scheme: light; font-family: system-ui, sans-serif; color: #172d38; background: #f3f6f7; }
+    * { box-sizing: border-box; }
+    body { margin: 0 auto; max-width: 1440px; padding: 28px; line-height: 1.5; }
+    h1 { font-size: 2rem; margin: 8px 0; }
+    h2 { font-size: 1.15rem; margin-top: 0; }
+    h3 { font-size: 1rem; }
+    p { margin: 8px 0 16px; }
+    a { color: #086c71; }
+    button { font: inherit; border: 1px solid #aebfc6; border-radius: 6px; padding: 8px 12px; background: white; color: inherit; cursor: pointer; }
+    button:hover { border-color: #086c71; background: #eef8f7; }
+    button:focus-visible { outline: 3px solid #086c71; outline-offset: 3px; }
+    button:disabled { opacity: .5; cursor: default; }
+    button[aria-selected="true"], .primary { color: white; background: #086c71; }
+    .tag { color: #086c71; text-transform: uppercase; font-weight: 700; font-size: .8rem; letter-spacing: .08em; }
+    .notice { border-left: 4px solid #086c71; padding: 12px 16px; background: #e7f2f1; }
+    .panel, article { background: white; padding: 20px; border: 1px solid #d5dfe3; border-radius: 10px; margin: 20px 0; }
+    .controls, .tabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+    .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+    article { margin: 0; min-width: 0; }
+    dl { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; font-size: .9rem; }
+    dt { color: #536871; } dd { margin: 0; overflow-wrap: anywhere; }
+    .metrics { display: flex; gap: 20px; margin: 16px 0; }
+    .metrics strong { display: block; font-size: 1.6rem; }
+    .metrics span { font-size: .8rem; }
+    .item { border-top: 1px solid #d5dfe3; padding: 10px 0; font-size: .9rem; }
+    .muted, small { color: #536871; }
+    .wrap { overflow-x: auto; }
+    table { border-collapse: collapse; width: 100%; font-size: .8rem; }
+    th, td { padding: 6px 5px; text-align: left; border-bottom: 1px solid #e3e9ec; vertical-align: top; }
+    .steps { display: grid; gap: 8px; }
+    .steps button { text-align: left; }
+    #announcement { min-height: 3em; }
+    @media (max-width: 1000px) { .grid { grid-template-columns: 1fr; } body { padding: 16px; } }
+  </style>
+</head>
+<body>
+  <header>
+    <span class="tag">Throwaway / synthetic data / no network</span>
+    <h1>Who keeps the notification inbox running?</h1>
+    <p>Explore first-party, self-hosted, and managed notification infrastructure by posting a fictional course reply, interrupting delivery, and recovering it. Which responsibilities are you willing to own?</p>
+    <p class="notice"><strong>This is an assumption explorer, not a technical benchmark.</strong> All three models use the same proposed acceptance, retry, deduplication, access, and retention rules. Managed behavior is a hypothetical integration contract, not verified Knock or Novu behavior. Nothing is stored, sent, provisioned, or approved in real life. Reloading loses everything, including the records labelled accepted.</p>
+    <p>Supports <a href="https://github.com/NorbertHipfl/cohort-005-project/issues/6">Choose first-party or managed notification infrastructure</a>.
+      <a href="https://github.com/NorbertHipfl/cohort-005-project/issues/5">Dated infrastructure research and pricing</a>.
+      This demo invents no engineering estimates, hosting prices, or capacity measurements.</p>
+  </header>
+
+  <section class="panel" aria-labelledby="state-heading">
+    <h2 id="state-heading">Current simulated state</h2>
+    <div id="environment"></div>
+    <p id="announcement" role="status" aria-live="polite"></p>
+    <div id="comparison" class="grid"></div>
+  </section>
+
+  <section class="panel" aria-labelledby="play-heading">
+    <h2 id="play-heading">Free play</h2>
+    <p class="muted">Every click applies to all three independent models. Delivery runs only when you click a delivery or clock action. One reply addresses one fictional Student.</p>
+    <div class="controls">
+      <button data-action="post" class="primary">Post a new course reply</button>
+      <button data-action="replay">Retry the last source request</button>
+      <button data-action="run">Run delivery now</button>
+      <button data-action="tick">Advance 15 seconds + run delivery</button>
+      <button data-action="outage">Interrupt delivery</button>
+      <button data-action="restore">Restore delivery</button>
+      <button data-action="store">Toggle source store availability</button>
+      <button data-action="approval">Toggle simulated third-party approval</button>
+      <button data-action="quota">Toggle managed quota exhaustion</button>
+      <button data-action="retry">Maintainer retries attention items</button>
+      <button data-action="read">Mark all currently visible items read</button>
+      <button data-action="access">Toggle discussion access</button>
+      <button data-action="expire">Advance 90 days</button>
+      <button data-action="cleanup">Run live-storage cleanup</button>
+      <button data-action="reset">Reset everything</button>
+    </div>
+    <p class="muted">The managed quota switch is an injected failure, not a real free-tier counter. Third-party approval starts off; toggling it grants permission only inside this simulation. Self-hosted here assumes deployment within your approved hosting boundary.</p>
+  </section>
+
+  <section class="panel" aria-labelledby="walk-heading">
+    <h2 id="walk-heading">Guided walkthroughs</h2>
+    <p class="muted">Selecting a tab resets all models to the same starting state. Follow the buttons in order; each performs a real simulation action.</p>
+    <div id="tabs" class="tabs" role="tablist" aria-label="Scenarios"></div>
+    <div id="walkthrough" role="tabpanel"></div>
+  </section>
+
+  <section class="panel">
+    <h2>What this comparison can and cannot tell you</h2>
+    <p><strong>The common application work does not disappear:</strong> authorize recipients, preserve source activity and notification intent together, recover failures without duplicates, enforce current visibility, and preserve original expiry. A provider does not make an accepted comment depend on a live provider request.</p>
+    <p><strong>Proposed ownership:</strong> first-party keeps inbox storage, delivery logic, and operations with the app maintainer. Self-hosted adds notification-service deployments and their backing stores. Managed outsources service operation but leaves integration, privacy approval, plan limits, and incident coordination with the app maintainer. Actual product fit still needs verification.</p>
+    <p><strong>Not established here:</strong> real transaction durability, provider idempotency windows, cross-device read synchronization, enforceable access boundaries, 90-day deletion/export support, 60-second freshness, burst capacity, hosting requirements, or total cost. No option is scored or recommended by this simulator.</p>
+    <p><strong>Human verdict:</strong> after trying the scenarios, record which ownership model you prefer, which assumptions are unacceptable, and what needs a real technical spike. The infrastructure decision remains open until you make it.</p>
+  </section>
+
+  <script>
+    const InfrastructureModel = (() => {
+      const DAY = 86400;
+      const definitions = [
+        { id: "first", title: "First-party application code", dependency: "App-owned delivery job",
+          owner: "Maintainer: inbox code, storage, retries, cleanup",
+          cost: "No new provider licence; engineering and host resources remain" },
+        { id: "self", title: "Open-source / self-hosted", dependency: "Self-hosted notification service",
+          owner: "Maintainer: app integration + service and backing-store operation",
+          cost: "Licence depends on product; hosting, upgrades, backups remain" },
+        { id: "managed", title: "Managed notification service", dependency: "External provider",
+          owner: "Maintainer: app integration, limits, privacy, provider incidents",
+          cost: "Plan/usage fees may apply; no spend or upgrades authorized" }
+      ];
+      const initial = () => ({
+        now: 0, sourceAvailable: true, deliveryAvailable: true,
+        approval: false, quotaExhausted: false, access: true,
+        lastId: null, nextId: 1, sources: [],
+        models: definitions.map(d => ({ ...d, intents: [], items: [], history: [] })),
+        message: "Ready. No source activity or notification intent has been accepted."
+      });
+      function transition(previous, action) {
+        const s = structuredClone(previous);
+        const note = text => { s.message = text; };
+        const history = (m, text) => {
+          m.history.unshift(`At ${s.now}s: ${text}`);
+          m.history = m.history.slice(0, 6);
+        };
+        function deliver() {
+          for (const m of s.models) {
+            for (const intent of m.intents) {
+              if (intent.status !== "pending" || intent.nextAt > s.now) continue;
+              if (s.now >= intent.createdAt + 90 * DAY) {
+                intent.status = "expired";
+                history(m, `${intent.id}: expired; not delivered.`);
+                continue;
+              }
+              const gate = m.id === "managed"
+                ? (!s.approval ? "third-party approval absent"
+                  : s.quotaExhausted ? "quota exhausted" : null)
+                : null;
+              if (gate) {
+                intent.status = "attention";
+                intent.reason = gate;
+                history(m, `${intent.id}: maintainer attention required (${gate}).`);
+                continue;
+              }
+              intent.attempts++;
+              if (!s.deliveryAvailable) {
+                if (intent.attempts >= 3) {
+                  intent.status = "attention";
+                  intent.reason = "three delivery attempts failed";
+                } else {
+                  intent.nextAt = s.now + [5, 15][intent.attempts - 1];
+                  intent.reason = "delivery unavailable; waiting for retry";
+                }
+                history(m, `${intent.id}: delivery unavailable, attempt ${intent.attempts}.`);
+                continue;
+              }
+              if (!m.items.some(item => item.id === intent.id)) {
+                m.items.push({
+                  id: intent.id, createdAt: intent.createdAt, read: false,
+                  course: "Example course", text: "A new reply in your lesson discussion"
+                });
+              }
+              intent.status = "delivered";
+              intent.reason = "";
+              history(m, `${intent.id}: delivered once.`);
+            }
+          }
+        }
+        switch (action) {
+          case "reset": return initial();
+          case "post":
+          case "replay": {
+            if (action === "replay" && !s.lastId) {
+              note("Nothing to retry: post a reply first.");
+              break;
+            }
+            if (!s.sourceAvailable) {
+              note("Reply rejected visibly: source store unavailable. No source effect or notification intent accepted.");
+              break;
+            }
+            const id = action === "replay" ? s.lastId : `reply-${s.nextId++}`;
+            if (s.sources.includes(id)) {
+              note(`${id}: repeated source request recognized. No duplicate reply or recipient intent created.`);
+              for (const m of s.models) history(m, `${id}: repeated source request deduplicated.`);
+              break;
+            }
+            s.sources.push(id);
+            s.lastId = id;
+            if (!s.access) {
+              for (const m of s.models) history(m, `${id}: reply accepted; recipient ineligible at event time, no notification intent.`);
+              note(`${id}: source reply accepted, but this Student had no discussion access. No notification intent; restoring access will not backfill it.`);
+              break;
+            }
+            for (const m of s.models) {
+              m.intents.push({ id, createdAt: s.now, status: "pending", attempts: 0, nextAt: s.now, reason: "" });
+              history(m, `${id}: source + intent accepted together (modeled only).`);
+            }
+            note(`${id}: accepted in every model. Delivery is separate; run delivery to continue.`);
+            break;
+          }
+          case "run": deliver(); note("Delivery pass complete. Inspect each model's intent state and activity."); break;
+          case "tick": s.now += 15; deliver(); note("Clock advanced 15 seconds; due work attempted."); break;
+          case "outage":
+            s.deliveryAvailable = false;
+            note("Delivery dependency interrupted in each model. Source acceptance is still independent.");
+            break;
+          case "restore":
+            s.deliveryAvailable = true;
+            note("Delivery dependencies restored. Pending work resumes on the next due pass; attention items require maintainer retry.");
+            break;
+          case "store":
+            s.sourceAvailable = !s.sourceAvailable;
+            note(`Source store ${s.sourceAvailable ? "restored" : "unavailable"}. This is separate from delivery.`);
+            break;
+          case "approval":
+            s.approval = !s.approval;
+            note(`Third-party data approval ${s.approval ? "on" : "off"} IN THIS MODEL ONLY. No actual approval or data transfer.`);
+            break;
+          case "quota":
+            s.quotaExhausted = !s.quotaExhausted;
+            note(`Managed quota failure ${s.quotaExhausted ? "injected" : "cleared"}. No purchase, upgrade, overage, or silent drop.`);
+            break;
+          case "retry":
+            for (const m of s.models) {
+              for (const intent of m.intents.filter(i => i.status === "attention")) {
+                intent.status = "pending";
+                intent.attempts = 0;
+                intent.nextAt = s.now;
+                intent.reason = "";
+                history(m, `${intent.id}: maintainer requeued original intent.`);
+              }
+            }
+            note("Attention items requeued; identity and original creation time preserved. Run delivery; unresolved gates will block again.");
+            break;
+          case "read":
+            for (const m of s.models) {
+              for (const item of m.items.filter(i => s.access && s.now < i.createdAt + 90 * DAY)) item.read = true;
+            }
+            note("Only currently visible items marked read. Later arrivals stay unread. This does not resolve a discussion.");
+            break;
+          case "access":
+            s.access = !s.access;
+            note(s.access ? "Access restored. Unexpired items reappear with their previous read state."
+              : "Discussion access removed. Existing items hidden from inbox and unread count; retained internally until expiry.");
+            break;
+          case "expire":
+            s.now += 90 * DAY;
+            deliver();
+            note("90 days passed. Original item expiry applies to both delivered and undelivered work. Stored payloads remain until cleanup.");
+            break;
+          case "cleanup":
+            for (const m of s.models) {
+              m.items = m.items.filter(i => s.now < i.createdAt + 90 * DAY);
+              m.intents = m.intents.filter(i => s.now < i.createdAt + 90 * DAY);
+              history(m, "Expired live payloads removed; source request identity ledger retained.");
+            }
+            note("Simulated live cleanup complete. Source identifiers remain for duplicate prevention; backup behavior is not modeled.");
+            break;
+          default: throw new Error(`Unknown action: ${action}`);
+        }
+        return s;
+      }
+      return { initial, transition, DAY };
+    })();
+  </script>
+  <script>
+    const scenarios = [
+      { title: "Accept, deliver, read", description: "See what the app still owns in every architecture. Simulated provider approval is explicit; duplicate source requests create no extra inbox item.",
+        steps: [["Post a fictional reply", "post"], ["Simulate third-party approval", "approval"], ["Deliver the accepted reply", "run"], ["Repeat the original source request", "replay"], ["Mark the visible inbox read", "read"], ["Post a second, distinct reply", "post"], ["Deliver it: the new item stays unread", "run"]] },
+      { title: "Outage and recovery", description: "A delivery outage must not undo an accepted reply. Compare the dependency and operational owner, not invented speed differences.",
+        steps: [["Simulate third-party approval", "approval"], ["Interrupt delivery", "outage"], ["Post while delivery is unavailable", "post"], ["Try delivery: first failure", "run"], ["Advance time: second attempt", "tick"], ["Restore the dependency", "restore"], ["Advance time: retry delivers once", "tick"], ["Replay the source request: no duplicate", "replay"]] },
+      { title: "Retry exhaustion", description: "Bounded automatic retries eventually need a maintainer. The 5/15-second delays and three-attempt cap are illustrative, not agreed production settings.",
+        steps: [["Simulate third-party approval", "approval"], ["Interrupt delivery", "outage"], ["Accept a reply", "post"], ["Try delivery", "run"], ["Wait for retry two", "tick"], ["Wait for retry three: attention needed", "tick"], ["Restore delivery", "restore"], ["Wait: attention items do not retry forever", "tick"], ["Maintainer requeues original work", "retry"], ["Deliver the same intent once", "run"]] },
+      { title: "Approval and quota", description: "External service approval and quota are different gates. Fixing one does not fix the other, and no gate authorizes spending or discarding alerts.",
+        steps: [["Accept a reply without external approval", "post"], ["Run: only managed needs approval", "run"], ["Simulate third-party approval", "approval"], ["Inject a managed quota failure", "quota"], ["Requeue the attention item", "retry"], ["Run: quota still blocks managed", "run"], ["Clear the synthetic quota failure", "quota"], ["Requeue without changing event identity", "retry"], ["Deliver without an upgrade or duplicate", "run"]] },
+      { title: "Source store failure", description: "Durable source acceptance is a common application responsibility. This demo only models that promise; it does not prove a real transaction.",
+        steps: [["Take the source store offline", "store"], ["Try posting: visibly rejected in all models", "post"], ["Restore source storage", "store"], ["Post successfully", "post"], ["Interrupt delivery after acceptance", "outage"], ["Try delivery: accepted reply stays accepted", "run"]] },
+      { title: "Access and expiry", description: "Current access controls visible items and unread counts. Returning access does not reset read state or lifetime. Expired recovery work must never resurrect an alert.",
+        steps: [["Simulate third-party approval", "approval"], ["Accept a reply", "post"], ["Deliver it", "run"], ["Mark the visible item read", "read"], ["Remove discussion access", "access"], ["Post while the recipient is ineligible: no intent", "post"], ["Restore access: no backfill; previous read state survives", "access"], ["Accept another reply, but do not deliver it", "post"], ["Advance 90 days: delivered and pending items expire", "expire"], ["Clean expired payloads from live storage", "cleanup"], ["Replay the source request: still no duplicate", "replay"]] }
+    ];
+    let state = InfrastructureModel.initial();
+    let scenarioIndex = 0;
+    let stepIndex = 0;
+    const $ = id => document.getElementById(id);
+    const escape = value => String(value).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    const field = (label, value) => `<dt>${escape(label)}</dt><dd>${escape(value)}</dd>`;
+    const age = seconds => seconds >= 86400 ? `${Math.floor(seconds / 86400)} days` : `${seconds}s`;
+    function render() {
+      $("environment").innerHTML = `<dl>
+        ${field("Simulated elapsed time", age(state.now))}
+        ${field("Accepted source replies", state.sources.length)}
+        ${field("Source store", state.sourceAvailable ? "available" : "unavailable")}
+        ${field("Delivery dependencies", state.deliveryAvailable ? "available" : "interrupted")}
+        ${field("Managed data approval", state.approval ? "simulated approval only" : "absent")}
+        ${field("Managed quota", state.quotaExhausted ? "failure injected" : "no failure injected")}
+        ${field("Discussion access", state.access ? "allowed" : "removed")}
+        ${field("Last source request", state.lastId || "none")}
+        ${field("Source identity ledger", state.sources.join(", ") || "empty")}
+      </dl>`;
+      $("announcement").textContent = state.message;
+      $("comparison").innerHTML = state.models.map(m => {
+        const visible = m.items.filter(i => state.access && state.now < i.createdAt + 90 * InfrastructureModel.DAY);
+        const waiting = m.intents.filter(i => i.status === "pending").length;
+        const attention = m.intents.filter(i => i.status === "attention").length;
+        return `<article>
+          <h2>${escape(m.title)}</h2>
+          <dl>${field("Dependency", m.dependency)}${field("Operational owner", m.owner)}${field("Cost boundary", m.cost)}</dl>
+          <div class="metrics">
+            <span><strong>${visible.length}</strong>visible</span>
+            <span><strong>${visible.filter(i => !i.read).length}</strong>unread</span>
+            <span><strong>${waiting}</strong>waiting</span>
+            <span><strong>${attention}</strong>attention</span>
+          </div>
+          <h3>Fictional Student's inbox</h3>
+          ${visible.length ? visible.map(i => `<div class="item"><strong>${escape(i.course)}</strong><br>${escape(i.text)}<br><small>${escape(i.id)} / ${i.read ? "read" : "unread"} / expires at ${age(i.createdAt + 90 * InfrastructureModel.DAY)}</small></div>`).join("") : '<p class="muted">No visible notifications.</p>'}
+          <p class="muted">Stored inbox payloads (including hidden/expired): ${m.items.length}. Retained source identifiers: ${state.sources.length}.</p>
+          <h3>Maintainer's delivery view</h3>
+          <div class="wrap"><table>
+            <thead><tr><th>Reply</th><th>Intent</th><th>Attempts</th><th>Next due / reason</th></tr></thead>
+            <tbody>${m.intents.length ? m.intents.map(i => `<tr><td>${escape(i.id)}</td><td>${escape(i.status)}</td><td>${i.attempts}</td><td>${i.status === "pending" ? age(i.nextAt) : "-"}${i.reason ? `<br>${escape(i.reason)}` : ""}</td></tr>`).join("") : '<tr><td colspan="4">No retained intents.</td></tr>'}</tbody>
+          </table></div>
+          <h3>Recent activity</h3>
+          ${m.history.length ? `<ol>${m.history.map(line => `<li>${escape(line)}</li>`).join("")}</ol>` : '<p class="muted">No activity yet.</p>'}
+        </article>`;
+      }).join("");
+      $("tabs").innerHTML = scenarios.map((scenario, i) => `<button role="tab" id="tab-${i}" aria-controls="walkthrough" aria-selected="${i === scenarioIndex}" data-scenario="${i}">${escape(scenario.title)}</button>`).join("");
+      const current = scenarios[scenarioIndex];
+      $("walkthrough").setAttribute("aria-labelledby", `tab-${scenarioIndex}`);
+      $("walkthrough").innerHTML = `<h3>${escape(current.title)}</h3><p>${escape(current.description)}</p>
+        <div class="steps">${current.steps.map(([label], i) => `<button data-step="${i}" ${i !== stepIndex ? "disabled" : ""}>${i < stepIndex ? "Done: " : `${i + 1}. `}${escape(label)}</button>`).join("")}</div>
+        <p>${stepIndex === current.steps.length ? "Walkthrough complete. No infrastructure has been selected." : `Next: step ${stepIndex + 1} of ${current.steps.length}.`} Free-play actions change the same state; select a tab to restart cleanly.</p>`;
+    }
+    document.addEventListener("click", event => {
+      const button = event.target.closest("button");
+      if (!button) return;
+      if (button.dataset.scenario !== undefined) {
+        scenarioIndex = Number(button.dataset.scenario);
+        stepIndex = 0;
+        state = InfrastructureModel.initial();
+        render();
+        $(`tab-${scenarioIndex}`).focus();
+      } else if (button.dataset.step !== undefined) {
+        if (Number(button.dataset.step) !== stepIndex) return;
+        state = InfrastructureModel.transition(state, scenarios[scenarioIndex].steps[stepIndex][1]);
+        stepIndex++;
+        render();
+        const next = document.querySelector(`[data-step="${stepIndex}"]`);
+        if (next) next.focus();
+        else $("walkthrough").scrollIntoView({ block: "nearest" });
+      } else if (button.dataset.action) {
+        state = InfrastructureModel.transition(state, button.dataset.action);
+        if (button.dataset.action === "reset") stepIndex = 0;
+        render();
+      }
+    });
+    document.addEventListener("keydown", event => {
+      if (event.target.getAttribute("role") !== "tab") return;
+      const keys = { ArrowRight: 1, ArrowLeft: -1 };
+      if (!(event.key in keys)) return;
+      event.preventDefault();
+      const index = (scenarioIndex + keys[event.key] + scenarios.length) % scenarios.length;
+      document.querySelector(`[data-scenario="${index}"]`).click();
+    });
+    render();
+  </script>
+</body>
+</html>
