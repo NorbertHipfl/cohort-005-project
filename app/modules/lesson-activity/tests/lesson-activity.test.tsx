@@ -66,6 +66,9 @@ describe("lesson activity", () => {
     const html = renderActivity();
 
     expect(html).toContain('aria-label="Your notes"');
+    expect(html).toMatch(
+      /<textarea[^>]*aria-label="Your notes"[^>]*><\/textarea>/
+    );
     expect(html).toContain('aria-describedby="lesson-note-privacy"');
     expect(html).toContain('id="lesson-note-privacy"');
     expect(html).toContain("Only you can read these notes.");
